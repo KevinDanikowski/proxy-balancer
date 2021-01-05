@@ -432,10 +432,11 @@ describe('Proxy Balancer', () => {
 
   context('retryFn(..)', () => {
     it('aborts and returns error', async () => {
-      let err
+      let err, proxyFailure
       const balancer = new Balancer({
-        retryFn: async ({ error, retryCount, timesThisIpRetried, ipsTried }, { abort }) => {
+        retryFn: async ({ error, retryCount, timesThisIpRetried, ipsTried, proxy }, { abort }) => {
           err = error
+          proxyFailure = proxy
           return abort();
         },
         fetchProxies
@@ -451,6 +452,7 @@ describe('Proxy Balancer', () => {
       } catch {
         expect(balancer.request.calledOnce).to.be.true
         expect(err.response.data).to.equal('fail')
+        expect(proxyFailure.url).to.equal('http://127.0.0.1:' + ports[1])
       }
     });
 

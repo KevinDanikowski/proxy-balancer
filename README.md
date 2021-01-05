@@ -76,7 +76,7 @@ const balancer = new Balancer({
   // optional retry function logic (supports async/await)
   // es6: import Balancer, { retryOptions } from 'proxy-balancer'
   // es5: const retryOptions = Balancer.retryOptions
-  retryFn: ({ error, retryCount, timesThisIpRetried, ipsTried }, { retrySameIp, retryNextIp, abort }) => {
+  retryFn: ({ error, retryCount, timesThisIpRetried, ipsTried, proxy }, { retrySameIp, retryNextIp, abort }) => {
     if (retryCount >= 3) {
       return abort();
     }
@@ -93,6 +93,7 @@ const balancer = new Balancer({
     callsPerDuration: 5, // required
     duration: 60 * 1000, // required
     postDurationWait: 5 * 60 * 1000, // required
+    block
   },
 
   // optionally handle no available proxies, i.e. request more proxies
