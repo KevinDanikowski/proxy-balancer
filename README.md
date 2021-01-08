@@ -76,7 +76,15 @@ const balancer = new Balancer({
   // optional retry function logic (supports async/await)
   // es6: import Balancer, { retryOptions } from 'proxy-balancer'
   // es5: const retryOptions = Balancer.retryOptions
-  retryFn: ({ error, retryCount, timesThisIpRetried, ipsTried, proxy }, { retrySameIp, retryNextIp, abort }) => {
+  retryFn: async ({ error, retryCount, timesThisIpRetried, ipsTried, proxy }, { retrySameIp, retryNextIp, abort, blockIP }) => {
+    // example of blockIP
+    if (proxy.url === repeatedlyFailingProxy) {
+      // duration is optional, it will use the limiter blockDuration
+      const duration = 60 * 60 * 1000
+      // takes optionally unformatted proxy as second argument i.e. blockIP(duration, { url: 'http://proxy:80' })
+      await blockIP(duration)
+    }
+
     if (retryCount >= 3) {
       return abort();
     }
@@ -93,7 +101,7 @@ const balancer = new Balancer({
     callsPerDuration: 5, // required
     duration: 60 * 1000, // required
     postDurationWait: 5 * 60 * 1000, // required
-    block
+    blockDuration: 5 * 60 * 1000 // optional default ip block duration on failure
   },
 
   // optionally handle no available proxies, i.e. request more proxies

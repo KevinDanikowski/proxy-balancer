@@ -513,5 +513,100 @@ describe('Proxy Balancer', () => {
         expect(timesThisIpRetriedVal).to.equal(2)
       }
     });
+
+    it('should block IP when there is a limiter', async () => {
+      const duration = 100
+      const postDurationWait = 200
+      const ipBlockDuration = 400
+      let block = 0
+      const balancer = new Balancer({
+        limiter: {
+          callsPerDuration: 1,
+          duration,
+          postDurationWait
+        },
+        // default validate function, need to respecify due to Balancer not fully resetting
+        validateFn: (res) => {
+          if (res.status && !(res.status >= 200 && res.status < 300)) {
+            throw new ResponseError('Server responded with a status code that falls out of the range of 2xx', res);
+          }
+        },
+        retryFn: async ({ error, retryCount, timesThisIpRetried, ipsTried, proxy }, { retrySameIp, abort, blockIP }) => {
+          // block the 3rd call for testing purposes
+          if (block === 2) {
+            block = block + 1
+            await blockIP(ipBlockDuration, { url: fetchProxies(1) })
+          } else {
+            block = block + 1
+          }
+          return abort()
+        },
+        fetchProxies: () => fetchProxies(1)
+      });
+
+      singleServer = createTestServer()
+
+      // creates function wrapper
+      sinon.spy(balancer, 'request')
+
+      // successful request
+      await balancer.request('http://127.0.0.1:8080')
+
+      // fail after 1 call
+      let failure = false
+      try {
+        await balancer.request('http://127.0.0.1:8080')
+      } catch {
+        failure = true
+        expect(balancer.request.calledTwice).to.be.true
+      }
+      expect(failure).to.be.true
+
+      // fail when not waiting full postDurationWait, will set block to 2
+      await delay(postDurationWait / 2)
+      failure = false
+      try {
+        await balancer.request('http://127.0.0.1:8080')
+      } catch {
+        failure = true
+        expect(balancer.request.calledThrice).to.be.true
+      }
+      expect(failure).to.be.true
+
+      await delay(postDurationWait / 2)
+
+      // success since waited full postDurationWait
+      await balancer.request('http://127.0.0.1:8080')
+      let success = true
+      expect(success).to.be.true
+
+      // failed call will block for ipBlockDuration this time
+      failure = false
+      try {
+        await balancer.request('http://127.0.0.1:8080')
+      } catch {
+        failure = true
+      }
+      expect(failure).to.be.true
+
+      await delay(postDurationWait)
+
+      // fail because postDurationWait is less than ipBlockDuration, i.e. insufficient wait time
+      failure = false
+      try {
+        await balancer.request('http://127.0.0.1:8080')
+      } catch {
+        failure = true
+      }
+      expect(failure).to.be.true
+
+      // delay full ipBlockDuration
+      await delay(ipBlockDuration - postDurationWait)
+
+      // success because waited full ipBlockDuration
+      await balancer.request('http://127.0.0.1:8080')
+
+      expect(success).to.be.true
+    });
   })
 });
